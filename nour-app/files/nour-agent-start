@@ -1,0 +1,34 @@
+#!/bin/sh
+
+CONFIG="/etc/nour/nour-agent.conf"
+
+if [ ! -f "$CONFIG" ]; then
+    echo "Nour agent configuration not found: $CONFIG"
+    exit 1
+fi
+
+. "$CONFIG"
+
+case "$NOUR_MODE" in
+
+    tcp)
+        exec /usr/bin/agent \
+            tcp \
+            "$NOUR_TCP_HOST" \
+            "$NOUR_TCP_PORT"
+        ;;
+
+    mqtt)
+        exec /usr/bin/agent \
+            mqtt \
+            "$NOUR_MQTT_HOST" \
+            "$NOUR_MQTT_PORT" \
+            "$NOUR_MQTT_TOPIC"
+        ;;
+
+    *)
+        echo "Invalid NOUR_MODE: $NOUR_MODE"
+        exit 1
+        ;;
+
+esac

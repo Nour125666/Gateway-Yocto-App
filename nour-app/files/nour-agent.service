@@ -1,0 +1,13 @@
+[Unit]
+Description=Nour Communication Agent
+After=nour-sensord.service network.target
+Requires=nour-sensord.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nour-agent-start
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

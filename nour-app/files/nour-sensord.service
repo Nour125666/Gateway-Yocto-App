@@ -1,0 +1,11 @@
+[Unit]
+Description=Nour Sensor Daemon
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/sensord
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
