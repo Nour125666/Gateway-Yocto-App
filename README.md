@@ -58,7 +58,7 @@ Simplified architecture:
 The background processes can be started automatically by systemd, while the CLI is used interactively for configuration and diagnostics.
 
 Repository Structure
-
+```text
 recipes-apps/
 └── application/
     ├── application_1.0.bb
@@ -70,7 +70,7 @@ recipes-apps/
         ├── agent-start
         ├── sensor.service
         └── agent.service
-
+```text
 The actual filenames in the repository may retain the original development names, but the architecture is intentionally generic and reusable.
 
 Yocto Repository Structure and Portability
