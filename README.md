@@ -1,304 +1,564 @@
-Embedded Linux Sensor Communication Application
+# ⚙️ Embedded Linux Sensor Communication Application
 
-This repository contains the application recipe of an embedded Linux communication project built with the Yocto Project.
+> A modular embedded Linux communication stack built with **C, C++, POSIX, Yocto, systemd, UART, TCP and MQTT**, validated end-to-end using **QEMU inside WSL2**.
 
-It demonstrates practical use of C, C++, POSIX APIs, Unix domain sockets, UART/TTY, TCP, MQTT, systemd integration and BitBake in a small multi-process embedded Linux application.
+This project demonstrates how multiple Linux userspace applications can work together as independent services to acquire sensor data, expose runtime configuration and transmit data over the network.
 
-The repository currently contains only the recipes-apps part of the project.
+The repository currently contains the **Yocto application recipe (`recipes-apps`)** and its associated source files, configuration and systemd services.
 
-Architecture
+---
 
-The application is composed of three programs:
+## 🚀 Project at a Glance
 
-Component
+**Languages:** `C` `C++`  
+**Build System:** `Yocto` `BitBake`  
+**Operating System:** `Embedded Linux`  
+**IPC:** `Unix Domain Sockets`  
+**Hardware Interface:** `UART / TTY / termios`  
+**Networking:** `TCP` `MQTT`  
+**Service Manager:** `systemd`  
+**Testing:** `QEMU qemux86-64` `WSL2`  
+**Target Direction:** `STM32MP1 / OpenSTLinux`
 
-Language
+### Current Status
 
-Role
+| Feature | Status |
+|---|---|
+| Yocto cross-compilation | ✅ Validated |
+| QEMU boot | ✅ Validated |
+| systemd startup | ✅ Validated |
+| Sensor service | ✅ Validated |
+| Communication agent | ✅ Validated |
+| Unix-domain socket IPC | ✅ Validated |
+| Interactive CLI | ✅ Validated |
+| UART runtime configuration | ✅ Validated |
+| Mock sensor mode | ✅ Validated |
+| TCP transmission | ✅ Validated |
+| QEMU → WSL2 networking | ✅ Validated |
+| MQTT integration | ✅ Integrated |
+| STM32MP1 hardware deployment | 🔜 Next step |
 
-sensord
+---
 
-C
+# 🧩 Architecture
 
-Reads sensor data from UART/TTY and provides mock data when hardware is unavailable
+The application is composed of three independent programs:
 
-agent
+| Component | Language | Responsibility |
+|---|---|---|
+| `sensord` | C | UART acquisition, sensor handling and mock-data fallback |
+| `agent` | C++ | TCP/MQTT communication and network configuration |
+| `cli` | C | Runtime configuration and diagnostics |
 
-C++
+```text
+                       User / Console / SSH
+                               │
+                               ▼
+                              CLI
+                     ┌─────────┴─────────┐
+                     │                   │
+                     ▼                   ▼
+              Agent Control       Sensor Control
+                     │                   │
+                     ▼                   ▼
+                   agent              sensord
+                     ▲                   │
+                     │                   │
+                     └──── Sensor Data ──┘
+                              │
+                       Unix Domain Socket
+                              │
+                     ┌────────┴────────┐
+                     │                 │
+                     ▼                 ▼
+                    TCP               MQTT
+```
 
-Receives sensor data and forwards it through TCP or MQTT
+The two backend applications are designed to run continuously as **systemd services**.
 
-cli
+The user normally interacts only with the CLI.
 
-C
+---
 
-Provides runtime configuration and status commands
+# 📂 Repository Structure
 
-Simplified architecture:
+This repository currently contains the **application recipe** part of the Yocto project.
 
-                     User / Console
-                           |
-                           v
-                          CLI
-                 +---------+---------+
-                 |                   |
-                 v                   v
-             agent control      sensor control
-                 |                   |
-                 v                   v
-               agent             sensord
-                 ^                   |
-                 |                   |
-                 +--- sensor data ---+
-                         |
-                         +---- TCP
-                         |
-                         +---- MQTT
-
-The background processes can be started automatically by systemd, while the CLI is used interactively for configuration and diagnostics.
-
-Repository Structure
 ```text
 recipes-apps/
-└── application/
-    ├── application_1.0.bb
+└── nour-app/
+    ├── nour-app_1.0.bb
+    │
     └── files/
         ├── sensord.c
         ├── agent.cpp
         ├── cli.c
-        ├── agent.conf
-        ├── agent-start
-        ├── sensor.service
-        └── agent.service
+        │
+        ├── nour-agent.conf
+        ├── nour-agent-start
+        │
+        ├── nour-sensord.service
+        └── nour-agent.service
+```
+
+The existing filenames originate from the development project, while the software architecture itself is generic and reusable.
+
+---
+
+# 🐧 Yocto / OpenEmbedded Integration
+
+The project follows the standard **Yocto/OpenEmbedded recipe structure**.
+
+The BitBake recipe handles:
+
+- C compilation
+- C++ compilation
+- cross-compilation
+- external dependencies
+- installation of binaries
+- configuration files
+- systemd unit installation
+- application packaging
+
+The communication stack depends on Eclipse Paho:
+
+```bitbake
+DEPENDS = " \
+    paho-mqtt-c \
+    paho-mqtt-cpp \
+"
+```
+
+The application can be built with:
+
+```bash
+bitbake nour-app
+```
+
+When integrated into an image recipe, the applications are installed directly into the target Linux root filesystem.
+
+---
+
+# 🌍 Hardware Portability
+
+The application is intentionally implemented using **standard Linux and POSIX interfaces** instead of directly accessing MCU registers.
+
+This makes the userspace architecture portable between different Yocto-supported Linux-capable platforms.
+
+Examples include:
+
 ```text
-The actual filenames in the repository may retain the original development names, but the architecture is intentionally generic and reusable.
+STM32MP1
+NXP i.MX
+TI Sitara
+Raspberry Pi
+x86 embedded platforms
+QEMU targets
+```
 
-Yocto Repository Structure and Portability
+The application logic itself normally does not need to be rewritten when changing boards.
 
-This project follows the standard Yocto/OpenEmbedded recipe structure, which allows the application to be integrated into a larger Yocto layer and reused across different embedded Linux targets.
+Board-specific work remains in the BSP layer:
 
-The application itself is intentionally kept mostly independent from the target hardware. Because it relies on standard Linux/POSIX interfaces, the same recipe and source architecture can be cross-compiled for different Yocto-supported boards, including platforms such as STM32MP1, provided that the corresponding BSP, machine configuration, Device Tree, and hardware interfaces are correctly configured.
+```text
+Yocto MACHINE
+BSP layers
+Linux kernel configuration
+Device Tree
+UART pinmux
+device naming
+network configuration
+boot configuration
+```
 
-In practice, moving from QEMU to a physical board should mainly require target-specific integration such as:
+For example, an STM32MP1 platform may expose a UART as:
 
-selecting the appropriate Yocto MACHINE
-
-adding the board BSP layers
-
-enabling the required UART in the Device Tree
-
-verifying the target UART device name
-
-adjusting network and boot configuration where necessary
-
-The application logic itself does not need to be rewritten for each board.
-
-Development and Test Environment
-
-The project was developed and thoroughly tested in a WSL2 Linux development environment using the Yocto Project toolchain.
-
-The complete userspace architecture was validated using QEMU (qemux86-64), including:
-
-Yocto/BitBake cross-compilation
-
-Linux boot with systemd
-
-automatic startup of the sensor and communication services
-
-Unix-domain socket IPC
-
-CLI runtime control
-
-UART mock fallback
-
-runtime baud-rate and interval changes
-
-TCP communication
-
-QEMU-to-host networking
-
-service logging through journalctl
-
-This provides a hardware-independent validation stage before deploying the same application architecture to a physical embedded Linux board such as an STM32MP1 target.
-
-Embedded C
-
-sensord and cli are implemented in C.
-
-The project demonstrates:
-
-POSIX file descriptors
-
-Unix domain sockets
-
-UART/TTY access
-
-termios
-
-command parsing
-
-process communication
-
-error handling
-
-runtime device configuration
-
-UART access is performed through the Linux TTY subsystem rather than direct MCU register access.
-
-Example Linux device:
-
+```text
 /dev/ttySTM1
+```
 
-This keeps the application in userspace and makes it portable across real hardware, pseudo-terminals and emulated environments.
+while another Linux platform might expose:
 
-C++ Communication Agent
+```text
+/dev/ttyS1
+/dev/ttyUSB0
+/dev/ttyAMA0
+```
 
-The communication agent is implemented in C++.
+The application simply operates on the configured Linux device path.
 
-It handles:
+---
 
-sensor data reception
+# 🧪 Development & Test Environment
 
+The project was developed inside a **WSL2 Ubuntu environment**.
+
+```text
+Windows
+   │
+   ▼
+WSL2 Ubuntu
+   │
+   ▼
+Yocto / BitBake
+   │
+   ▼
+QEMU qemux86-64
+   │
+   ▼
+Embedded Linux Application
+```
+
+QEMU provides a hardware-independent validation stage before moving the software to the physical embedded target.
+
+This allowed the complete userspace architecture to be tested without requiring the final STM32 board.
+
+---
+
+# ✅ QEMU Validation
+
+The project was thoroughly tested using:
+
+```text
+WSL2
+Yocto
+Poky
+QEMU qemux86-64
+systemd
+```
+
+Validated functionality includes:
+
+```text
+Linux boot
+systemd initialization
+automatic service startup
+Unix-domain socket IPC
+interactive CLI
+runtime UART configuration
+runtime interval configuration
+mock sensor fallback
 TCP communication
+QEMU-to-host networking
+journalctl logging
+```
 
-MQTT communication
-
-runtime protocol switching
-
-external library integration
-
-background communication logic
-
-The MQTT implementation uses Eclipse Paho.
-
-Example startup modes:
-
-agent tcp <ip> <port>
-agent mqtt <ip> <port> <topic>
-
-POSIX and Linux APIs
-
-The project exercises several important Linux userspace concepts:
-
-open()
-read()
-write()
-close()
-socket()
-bind()
-connect()
-accept()
-pthread
-termios
-Unix domain sockets
-
-These interfaces form the bridge between the application and Linux kernel services.
-
-UART / TTY
-
-UART communication is handled using standard Linux APIs.
-
-The kernel exposes the UART as a device file:
-
-/dev/ttySTMx
-
-The application configures communication parameters such as:
-
-baud rate
-data bits
-parity
-stop bits
-
-through termios.
-
-Example CLI interaction:
-
-> uart show
-Device: /dev/ttySTM1
-Baud: 115200
-Format: 8N1
-
-> uart baud 57600
-OK UART baud set to 57600
-
-When the UART device is unavailable, the sensor process falls back to mock sensor values so the software stack can still be tested.
-
-Inter-Process Communication
-
-The project uses Unix domain sockets for communication between local processes.
-
-They are used for:
-
-sensor data transfer
-
-agent control
-
-UART configuration
-
-status queries
-
-Unix sockets were chosen instead of simple pipes because the architecture requires independent processes and bidirectional command/response communication.
-
-Pipes vs Unix Sockets
-
-A pipe is well suited to a simple one-way data stream:
-
-Process A ---> Process B
-
-Unix domain sockets allow a more flexible architecture:
-
-Process A <----> Process B
-Process C <----> Process B
-
-They support client/server semantics while remaining local to the Linux system.
-
-Threads, Scheduling and Mutexes
-
-The application demonstrates important Linux concurrency concepts.
-
-For example, one execution path may handle sensor acquisition while another handles configuration commands.
-
-This introduces topics such as:
-
-Linux task scheduling
-
-blocking I/O
-
-periodic execution
-
-threads
-
-shared state
-
-race conditions
-
-synchronization
-
-A mutex is used or becomes necessary whenever multiple execution contexts can modify shared data such as:
-
-UART configuration
-communication mode
-sampling interval
-connection state
-
-The current design uses normal Linux userspace scheduling.
-
-For applications requiring stronger timing guarantees, possible future extensions include:
-
-SCHED_FIFO
-SCHED_RR
-thread priorities
-CPU affinity
-PREEMPT_RT
-
-CLI
-
-The command-line interface provides runtime control without restarting the services.
+A complete TCP test successfully transferred generated sensor values from the QEMU guest to the WSL2 host.
 
 Example:
 
-$ cli
+```text
+79.40
+79.50
+79.60
+79.70
+79.80
+```
 
+The tested path was:
+
+```text
+sensord
+   │
+   ▼
+Sensor / Mock Data
+   │
+   ▼
+Unix Domain Socket
+   │
+   ▼
+agent
+   │
+   ▼
+TCP
+   │
+   ▼
+QEMU Network
+   │
+   ▼
+WSL2 Host
+```
+
+---
+
+# 🔌 UART / Linux TTY
+
+UART communication is handled through the standard Linux TTY subsystem.
+
+The userspace application does **not** directly manipulate UART hardware registers.
+
+```text
+Physical UART
+     │
+     ▼
+Linux UART Driver
+     │
+     ▼
+TTY Subsystem
+     │
+     ▼
+/dev/ttyXXX
+     │
+     ▼
+POSIX / termios
+     │
+     ▼
+sensord
+```
+
+The kernel and Device Tree handle:
+
+```text
+peripheral enablement
+pin multiplexing
+interrupts
+hardware resources
+driver binding
+```
+
+The application handles:
+
+```text
+baud rate
+data format
+sensor acquisition
+runtime configuration
+communication logic
+```
+
+The default format is:
+
+```text
+115200 baud
+8 data bits
+No parity
+1 stop bit
+
+8N1
+```
+
+---
+
+# 🧪 Mock Sensor Mode
+
+When the configured UART is unavailable, `sensord` automatically falls back to generated data.
+
+Example:
+
+```text
+UART unavailable: /dev/ttySTM1
+using mock data
+
+79.40
+79.50
+79.60
+```
+
+This allows the entire software stack to be tested without physical sensor hardware.
+
+It was especially useful during QEMU development because the virtual x86 target obviously does not expose an STM32 UART such as:
+
+```text
+/dev/ttySTM1
+```
+
+---
+
+# 🔄 Inter-Process Communication
+
+The applications communicate locally using **Unix domain sockets**.
+
+The IPC layer handles:
+
+- sensor data transfer
+- agent configuration
+- UART configuration
+- status requests
+- CLI commands
+
+Conceptually:
+
+```text
+sensord
+   │
+   │ sensor data
+   ▼
+Unix Socket
+   │
+   ▼
+agent
+```
+
+And:
+
+```text
+              CLI
+             /   \
+            /     \
+           ▼       ▼
+       sensord    agent
+       control    control
+```
+
+This keeps local control communication separate from external TCP/MQTT networking.
+
+---
+
+# 🔀 Pipes vs Unix Domain Sockets
+
+Linux pipes are ideal for simple streams:
+
+```text
+Process A ──────► Process B
+```
+
+For example:
+
+```bash
+program1 | program2
+```
+
+This project requires communication between **independent long-running processes**, including request/response commands.
+
+Unix domain sockets provide:
+
+```text
+bidirectional communication
+client/server semantics
+independent processes
+multiple endpoints
+persistent interfaces
+request/response communication
+```
+
+They are therefore better suited to this architecture than anonymous pipes.
+
+---
+
+# 🧵 Processes, Threads & Concurrency
+
+The software is intentionally split into independent Linux processes:
+
+```text
+sensord
+agent
+cli
+```
+
+This provides:
+
+- modularity
+- fault isolation
+- easier debugging
+- independent testing
+- clear responsibilities
+- service supervision
+
+Threads are used when one process needs to handle multiple operations concurrently.
+
+For example:
+
+```text
+sensor acquisition
+       +
+control interface
+       +
+communication
+```
+
+---
+
+# 🔐 Mutexes & Synchronization
+
+Multithreaded applications often share runtime state.
+
+Examples include:
+
+```text
+UART baud rate
+UART device
+sampling interval
+network configuration
+connection state
+```
+
+If multiple threads access this data simultaneously, race conditions can occur.
+
+A mutex provides controlled access:
+
+```text
+Thread A
+   │
+   ▼
+LOCK
+   │
+Modify shared configuration
+   │
+   ▼
+UNLOCK
+
+
+Thread B
+   │
+   └──── waits while locked
+```
+
+Synchronization is therefore an important aspect of robust Linux userspace design.
+
+---
+
+# ⏱️ Linux Scheduling
+
+Linux schedules the project's processes and threads automatically.
+
+The scheduler determines when applications such as:
+
+```text
+sensord
+agent
+CLI
+systemd
+network services
+```
+
+receive CPU execution time.
+
+The current application uses standard Linux userspace scheduling.
+
+For stronger timing requirements, Linux provides policies such as:
+
+```text
+SCHED_OTHER
+SCHED_FIFO
+SCHED_RR
+```
+
+Potential extensions include:
+
+```text
+thread priorities
+CPU affinity
+PREEMPT_RT
+real-time scheduling
+```
+
+The current application does **not** claim hard real-time behavior.
+
+---
+
+# 💻 CLI
+
+The CLI provides runtime control without restarting the services.
+
+Start it with:
+
+```bash
+cli
+```
+
+Example:
+
+```text
 Embedded CLI
 Type 'help' for commands.
 
@@ -309,253 +569,346 @@ Type 'help' for commands.
 > tcp 10.0.2.2 5000
 > mqtt 10.0.2.2 1883 sensor/data
 > exit
+```
 
-This demonstrates command parsing and local IPC between the CLI and the running background processes.
+Supported operations include:
 
-systemd Integration
+```text
+status
 
-The recipe includes systemd service files for the sensor and communication processes.
+tcp <ip> <port>
 
-The intended boot flow is:
+mqtt <ip> <port> <topic>
 
-Linux boot
-   |
-   v
+interval <milliseconds>
+
+uart show
+
+uart baud <baud>
+
+uart device <device>
+
+uart reconnect
+```
+
+The CLI communicates with the already-running services through Unix domain sockets.
+
+---
+
+# ⚡ systemd Services
+
+The sensor and communication applications are managed by `systemd`.
+
+Installed services:
+
+```text
+nour-sensord.service
+nour-agent.service
+```
+
+Boot sequence:
+
+```text
+POWER ON
+   │
+   ▼
+Linux Kernel
+   │
+   ▼
 systemd
-   |
-   +---- sensor service
-   |
-   +---- communication agent
+   │
+   ├───────────────┐
+   ▼               ▼
+sensord           agent
+   │               │
+   └──────┬────────┘
+          │
+          ▼
+      System Ready
+```
 
-This allows both applications to:
+No manual:
 
-start automatically at boot
+```bash
+sensord &
+```
 
-run in the background
+or:
 
-restart after failure
+```bash
+agent ...
+```
 
-expose logs through journalctl
+is required after boot.
 
-Typical commands:
+---
 
-systemctl status <sensor-service>
-systemctl status <agent-service>
-journalctl -u <sensor-service>
-journalctl -u <agent-service>
+# 📋 Service Management & Logging
 
-Yocto / BitBake
+Service state can be checked with:
 
-The recipe demonstrates how a custom userspace application is integrated into Yocto.
+```bash
+systemctl status nour-sensord
+systemctl status nour-agent
+```
 
-It covers:
+or:
 
-compiling C and C++
+```bash
+systemctl is-active nour-sensord
+systemctl is-active nour-agent
+```
 
-cross-compilation
+Expected:
 
-installing binaries into the target root filesystem
+```text
+active
+active
+```
 
-external dependency handling
+Logs can be inspected with:
 
-systemd service installation
+```bash
+journalctl -u nour-sensord
+```
 
-configuration file installation
+and:
 
+```bash
+journalctl -u nour-agent
+```
+
+This provides proper Linux service supervision rather than manually launching background processes.
+
+---
+
+# 📦 BitBake
+
+BitBake transforms the application source code into target packages.
+
+The recipe handles:
+
+```text
+source files
+compiler configuration
+C compilation
+C++ compilation
+external libraries
+installation paths
+systemd units
+configuration files
 packaging
+```
 
-Main application dependencies include:
+Because BitBake uses the toolchain associated with the selected:
 
-paho-mqtt-c
-paho-mqtt-cpp
+```text
+MACHINE
+```
 
-The recipe can be built with:
+the same application recipe can be cross-compiled for different target architectures.
 
-bitbake <recipe-name>
+---
 
-Kernel and Userspace Separation
+# 🧠 Kernel vs Userspace
 
-A central concept demonstrated by this project is the separation between hardware support and application logic.
+One of the main concepts demonstrated by the project is the separation between the **Linux kernel** and **userspace applications**.
 
-Physical UART
-     |
-     v
-Linux UART driver
-     |
-     v
-TTY subsystem
-     |
-     v
-/dev/ttySTMx
-     |
-     v
-POSIX / termios
-     |
-     v
-sensord
+### Kernel responsibilities
 
-The Linux kernel and Device Tree handle:
-
-peripheral enablement
-
-pin multiplexing
-
+```text
+hardware drivers
+process scheduling
+memory management
+interrupts
+network interfaces
+device files
 hardware resources
+```
 
-driver binding
+### Application responsibilities
 
-The userspace application handles:
-
-UART configuration
-
-sensor acquisition
-
+```text
+sensor logic
 protocol logic
+runtime configuration
+CLI
+data processing
+network transmission
+```
 
-application control
+For UART:
 
-This separation is fundamental to embedded Linux design.
+```text
+Hardware
+   │
+   ▼
+Kernel Driver
+   │
+   ▼
+TTY Subsystem
+   │
+   ▼
+Device File
+   │
+   ▼
+Userspace Application
+```
 
-Networking
+This separation is fundamental to embedded Linux architecture.
+
+---
+
+# 🌐 Networking
 
 The communication agent currently supports:
 
-TCP
+### TCP
 
-MQTT
+Direct socket-based communication between two systems.
 
-TCP provides a direct network stream.
+```text
+Device ───────── TCP ─────────► Server
+```
 
-MQTT provides broker-based publish/subscribe communication and is suitable for IoT and telemetry applications.
+### MQTT
 
-HTTP is not currently part of the implemented data path, but the architecture could later be extended with an HTTP or REST interface for:
+Broker-based publish/subscribe communication.
 
-configuration
+```text
+Device
+   │
+   ▼
+MQTT Broker
+   │
+   ├────► Application
+   ├────► Database
+   └────► Cloud Service
+```
 
+MQTT is implemented using **Eclipse Paho**.
+
+HTTP is not currently part of the runtime communication path.
+
+However, an HTTP/REST interface could later provide:
+
+```text
+configuration APIs
 diagnostics
-
-local web APIs
-
+remote management
+local web interface
 cloud integration
+```
 
-QEMU Validation
+---
 
-The application stack has been validated in a Yocto qemux86-64 environment.
+# 🎯 Target Hardware
 
-Verified functionality includes:
+The next major target is:
 
-systemd service startup
-sensor process startup
-communication agent startup
-Unix socket communication
-interactive CLI
-runtime interval changes
-runtime UART configuration
-mock sensor fallback
-TCP transmission
-QEMU-to-host networking
+```text
+STM32MP157F-DK2
+Cortex-A7
+OpenSTLinux
+Yocto Project
+```
 
-A complete TCP test successfully transferred generated sensor values from QEMU to a listener running on the host.
+The userspace architecture should remain largely unchanged.
 
-Example:
+The target-specific work mainly involves:
 
-79.40
-79.50
-79.60
-79.70
+```text
+STM32 BSP
+Yocto MACHINE
+Device Tree
+UART pinmux
+UART device verification
+network configuration
+hardware testing
+```
 
-Skills Demonstrated
+---
 
-This project showcases practical experience with:
+# 🔮 Future Improvements
 
-Languages
+Planned or possible extensions include:
 
-C
+- 🔐 SSH / Dropbear
+- 💾 persistent configuration
+- 🔌 real STM32 UART validation
+- 🌳 Device Tree configuration
+- 📡 MQTT broker validation
+- 🔒 TLS
+- 🐕 watchdog integration
+- 📊 structured logging
+- ❤️ health monitoring
+- 🌐 HTTP / REST API
+- 🧵 additional synchronization hardening
+- ⏱️ real-time scheduling evaluation
+- ⚡ PREEMPT_RT
+- 🔄 OTA update integration
 
-C++
+---
 
-Embedded Linux
+# 🛠️ Skills Demonstrated
 
-POSIX APIs
+This project brings together multiple areas of embedded Linux engineering:
 
-processes
+### Languages
+`C` · `C++`
 
-threads
+### Linux
+`POSIX` · `Processes` · `Threads` · `Scheduling` · `Mutexes`
 
-Linux scheduling concepts
+### Hardware Interfaces
+`UART` · `TTY` · `termios`
 
-mutexes and synchronization
+### IPC
+`Unix Domain Sockets` · `Pipes Concepts`
 
-TTY
+### Networking
+`TCP` · `MQTT`
 
-termios
+### System Integration
+`systemd` · `journald`
 
-Unix domain sockets
+### Build System
+`Yocto` · `BitBake` · `Cross Compilation`
 
-Networking
+### Validation
+`QEMU` · `WSL2` · `Mock Hardware` · `Host/Guest Networking`
 
-TCP
+### Embedded Architecture
+`Kernel / Userspace Separation` · `Device Files` · `BSP Integration`
 
-MQTT
+---
 
-System Integration
+# 📌 Project Status
 
+> **QEMU userspace architecture: validated ✅**
+
+The complete application architecture has been tested under:
+
+```text
+WSL2
+   +
+Yocto / Poky
+   +
+QEMU qemux86-64
+   +
 systemd
+```
 
-service supervision
+The next major milestone is deployment and validation on real **STM32MP1 hardware**.
 
-journald
+---
 
-Yocto
+# 📄 License
 
-BitBake recipes
+The current development recipe uses:
 
-dependency management
-
-package installation
-
-cross-compilation
-
-Linux Architecture
-
-kernel/userspace separation
-
-Linux device files
-
-TTY subsystem
-
-Testing
-
-QEMU
-
-mock hardware
-
-host/guest networking
-
-Current Status
-
-The application architecture has been validated under QEMU.
-
-The next major steps are:
-
-real UART validation on the target board
-
-Device Tree UART configuration
-
-persistent runtime configuration
-
-SSH integration
-
-MQTT broker validation
-
-further synchronization hardening
-
-target deployment on STM32MP1
-
-License
-
-The development recipe currently uses:
-
+```bitbake
 LICENSE = "CLOSED"
+```
 
-An explicit open-source license should be selected before publishing the project as reusable open-source software.
+An explicit software license should be selected before publishing the project as reusable open-source software.
